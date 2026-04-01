@@ -1,4 +1,13 @@
 const state = {
+  trainerAccounts: [
+    { email: "trainer1@fitnessfreaks.com", password: "trainer123", name: "Coach Neha" },
+    { email: "trainer2@fitnessfreaks.com", password: "coach456", name: "Coach Arjun" }
+  ],
+  memberAccounts: [
+    { email: "aarav@fitnessfreaks.com", password: "aarav123", name: "Aarav Mehta", plan: "Transformation Pack" },
+    { email: "riya@fitnessfreaks.com", password: "riya123", name: "Riya Sharma", plan: "Quarterly Build" },
+    { email: "karan@fitnessfreaks.com", password: "karan123", name: "Karan Nair", plan: "Monthly Elite" }
+  ],
   members: [
     { name: "Aarav Mehta", goal: "Fat loss", plan: "Transformation Pack" },
     { name: "Riya Sharma", goal: "Strength gain", plan: "Quarterly Build" },
@@ -33,6 +42,7 @@ const state = {
 
 const dashboardIds = ["trainer-dashboard", "member-dashboard"];
 const toast = document.getElementById("toast");
+let currentMember = state.memberAccounts[0];
 
 function renderMembers() {
   const registry = document.getElementById("member-registry");
@@ -62,7 +72,10 @@ function renderWorkouts() {
       <button class="ghost-btn feed-action" data-edit-workout="${item.member}">Edit</button>
     </div>
   `).join("");
-  memberFeed.innerHTML = state.workouts.map((item) => `
+  const visibleWorkouts = currentMember
+    ? state.workouts.filter((item) => item.member === currentMember.name)
+    : state.workouts;
+  memberFeed.innerHTML = visibleWorkouts.map((item) => `
     <div class="feed-item">
       <div>
         <strong>${item.focus}</strong>
@@ -72,7 +85,7 @@ function renderWorkouts() {
     </div>
   `).join("");
   document.getElementById("plan-count").textContent = state.workouts.length;
-  document.getElementById("member-workout-count").textContent = state.workouts.length;
+  document.getElementById("member-workout-count").textContent = visibleWorkouts.length;
 }
 
 function renderDiets() {
@@ -88,7 +101,10 @@ function renderDiets() {
       <button class="ghost-btn feed-action" data-edit-diet="${item.member}">Edit</button>
     </div>
   `).join("");
-  memberFeed.innerHTML = state.diets.map((item) => `
+  const visibleDiets = currentMember
+    ? state.diets.filter((item) => item.member === currentMember.name)
+    : state.diets;
+  memberFeed.innerHTML = visibleDiets.map((item) => `
     <div class="feed-item">
       <div>
         <strong>${item.calories}</strong>
@@ -127,11 +143,12 @@ function renderAttendance() {
 
 function renderProgress() {
   const progressFeed = document.getElementById("progress-feed");
+  const prefix = currentMember ? `${currentMember.name}: ` : "";
   progressFeed.innerHTML = state.progress.map((item) => `
     <div class="feed-item">
       <div>
         <strong>${item.week}</strong>
-        <p>${item.result}</p>
+        <p>${prefix}${item.result}</p>
       </div>
     </div>
   `).join("");
@@ -192,6 +209,9 @@ function setActiveDashboard(role) {
   document.querySelectorAll(".login-card").forEach((card) => card.classList.remove("active-card"));
   document.getElementById(`${role}-login-card`).classList.add("active-card");
   localStorage.setItem("pulsepointRole", role);
+  if (role === "member" && currentMember) {
+    localStorage.setItem("pulsepointMemberEmail", currentMember.email);
+  }
 }
 
 function logout(role) {
@@ -199,6 +219,9 @@ function logout(role) {
   document.getElementById(`${role}-login-card`).classList.remove("active-card");
   if (localStorage.getItem("pulsepointRole") === role) {
     localStorage.removeItem("pulsepointRole");
+  }
+  if (role === "member") {
+    localStorage.removeItem("pulsepointMemberEmail");
   }
   document.getElementById("logins").scrollIntoView({ behavior: "smooth", block: "start" });
   showToast(`${role === "trainer" ? "Trainer" : "Member"} logged out`);
@@ -226,8 +249,32 @@ function attachLoginBehavior() {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const role = form.dataset.login;
+      const formData = new FormData(form);
+      const email = String(formData.get("email")).trim().toLowerCase();
+      const password = String(formData.get("password")).trim();
+
+      if (role === "trainer") {
+        const account = state.trainerAccounts.find((item) => item.email === email && item.password === password);
+        if (!account) {
+          showToast("Invalid trainer login");
+          return;
+        }
+        setActiveDashboard(role);
+        showToast(`${account.name} logged in`);
+        return;
+      }
+
+      const account = state.memberAccounts.find((item) => item.email === email && item.password === password);
+      if (!account) {
+        showToast("Invalid member login");
+        return;
+      }
+      currentMember = account;
+      renderWorkouts();
+      renderDiets();
+      renderProgress();
       setActiveDashboard(role);
-      showToast(`${role === "trainer" ? "Trainer" : "Member"} dashboard ready`);
+      showToast(`${account.name} logged in`);
     });
   });
 
@@ -402,6 +449,16 @@ function attachEditActions() {
 
 function restoreSession() {
   const savedRole = localStorage.getItem("pulsepointRole");
+  const savedMemberEmail = localStorage.getItem("pulsepointMemberEmail");
+  if (savedMemberEmail) {
+    const account = state.memberAccounts.find((item) => item.email === savedMemberEmail);
+    if (account) {
+      currentMember = account;
+      renderWorkouts();
+      renderDiets();
+      renderProgress();
+    }
+  }
   if (savedRole && dashboardIds.includes(`${savedRole}-dashboard`)) {
     setActiveDashboard(savedRole);
   }
